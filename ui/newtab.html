@@ -76,6 +76,22 @@
   function letter(u){ var h = host(u); return (h[0]||'?').toUpperCase(); }
   function getApi(){ return window.pywebview && window.pywebview.api; }
 
+  /* ---------- theme (match browser chrome) ---------- */
+  function isDarkColor(hex){
+    try {
+      var c = String(hex||'#ffffff').replace('#','');
+      if(c.length===3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+      var r=parseInt(c.substr(0,2),16), g=parseInt(c.substr(2,2),16), b=parseInt(c.substr(4,2),16);
+      return ((0.299*r+0.587*g+0.114*b)/255) < 0.5;
+    } catch(e){ return false; }
+  }
+  function applyThemeColor(color){
+    color = color || '#ffffff';
+    var dark = isDarkColor(color);
+    document.body.style.background = color;
+    document.body.style.color = dark ? '#f2f2f2' : '#1a1a1a';
+  }
+
   /* ---------- search submit (robust) ---------- */
   function doSearch(value){
     var v = (value||'').trim();
@@ -182,6 +198,8 @@
         var pinned = (s.bookmarks||[]).filter(function(b){return b.pinned;});
         if(!pinned.length) p.innerHTML = '<div class="empty">Star pages with &#9734; in the address bar, then right-click a bookmark to pin it here.</div>';
         pinned.forEach(function(b){ p.appendChild(tile(b, true)); });
+        // respect the theme color (auto-contrast text)
+        applyThemeColor(s.themeColor);
       });
     } catch(e){}
     try {

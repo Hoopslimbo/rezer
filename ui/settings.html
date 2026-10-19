@@ -141,8 +141,8 @@
       document.getElementById('engine').value = s.search_engine || 'google';
       renderBookmarks(s.bookmarks || []);
     });
-    api.get_state().then(function(s){
-      document.getElementById('ver').textContent = 'Rezer 0.1.0';
+    api.get_version().then(function(v){
+      document.getElementById('ver').textContent = 'Rezer ' + (v || '');
     });
     loadPasswords();
   });

@@ -18,7 +18,7 @@ def _is_url(text: str) -> bool:
     t = text.strip()
     if " " in t:
         return False
-    if t.startswith(("http://", "https://", "file://")):
+    if t.startswith(("http://", "https://", "file://", "rezer://")):
         return True
     # domain.tld or localhost...
     return "." in t and not t.startswith(".")
@@ -37,7 +37,10 @@ class Api:
     # ---------- internal helpers ----------
 
     def _w(self):
-        return self.c["window"]
+        # app.py passes "window" as a lambda (deferred lookup, since the
+        # window doesn't exist yet when the Api is constructed). Resolve it.
+        w = self.c["window"]
+        return w() if callable(w) else w
 
     def _eval(self, js: str):
         try:
@@ -245,7 +248,14 @@ class Api:
     # ---------- settings ----------
 
     def get_settings(self):
-        return self.c["settings"].all()
+        s = self.c["settings"].all()
+        # settings.html renders the bookmark list from here
+        s["bookmarks"] = self.c["bookmarks"].all()
+        return s
+
+    def get_version(self):
+        from . import __version__
+        return __version__
 
     def set_setting(self, key, value):
         try:

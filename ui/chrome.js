@@ -103,8 +103,34 @@
     }
   };
 
+  function isDarkColor(hex) {
+    try {
+      var c = String(hex || '#ffffff').replace('#', '');
+      if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+      var r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16);
+      var lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return lum < 0.5;
+    } catch (e) { return false; }
+  }
+
   function applyTheme(color) {
-    document.documentElement.style.setProperty('--rz-bg', color || '#ffffff');
+    color = color || '#ffffff';
+    var root = document.documentElement.style;
+    root.setProperty('--rz-bg', color);
+    // auto-contrast: dark theme color -> light text, and vice versa
+    if (isDarkColor(color)) {
+      root.setProperty('--rz-text', '#f2f2f2');
+      root.setProperty('--rz-muted', '#a3a3a3');
+      root.setProperty('--rz-border', '#3d3d3d');
+      root.setProperty('--rz-hover', 'rgba(255,255,255,0.08)');
+      root.setProperty('--rz-active', 'rgba(255,255,255,0.14)');
+    } else {
+      root.setProperty('--rz-text', '#1a1a1a');
+      root.setProperty('--rz-muted', '#6b7280');
+      root.setProperty('--rz-border', '#e2e2e2');
+      root.setProperty('--rz-hover', 'rgba(0,0,0,0.06)');
+      root.setProperty('--rz-active', 'rgba(0,0,0,0.1)');
+    }
   }
 
   function renderTabs(state) {
