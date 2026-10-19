@@ -6,20 +6,11 @@
 <style>
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; margin: 0; min-height: 100vh;
-         display: flex; flex-direction: column; align-items: center; padding-top: 11vh;
+         display: flex; flex-direction: column; align-items: center; padding-top: 14vh;
          background: #fff; color: #1a1a1a;
          background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(37,99,235,0.06), transparent); }
-  #logo { width: 76px; height: 76px; margin-bottom: 16px;
-          filter: drop-shadow(0 6px 18px rgba(37,99,235,0.25));
-          transition: transform 0.25s cubic-bezier(0.25,0.8,0.35,1); }
-  #logo:hover { transform: scale(1.06) rotate(-3deg); }
-  #logo img { width: 100%; height: 100%; object-fit: contain; }
-  h1 { font-size: 32px; font-weight: 700; margin: 0 0 24px 0; letter-spacing: 3px;
-       background: linear-gradient(120deg, #1a1a1a 30%, #2563eb 100%);
-       -webkit-background-clip: text; background-clip: text;
-       -webkit-text-fill-color: transparent; }
-  #search { width: min(580px, 86vw); display: flex;
-            filter: drop-shadow(0 4px 16px rgba(0,0,0,0.07)); }
+  #searchwrap { width: min(580px, 86vw); position: relative; }
+  #search { display: flex; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.07)); }
   #q { flex: 1; height: 50px; border: 1.5px solid transparent; border-radius: 25px;
        padding: 0 24px; font-size: 15px; outline: none; background: #f4f5f7; color: #1a1a1a;
        transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease; }
@@ -27,6 +18,21 @@
   #q:hover { background: #eceef1; }
   #q:focus { border-color: #2563eb; background: #fff;
              box-shadow: 0 0 0 4px rgba(37,99,235,0.13); }
+  #suggest { position: absolute; top: 56px; left: 0; right: 0; background: #fff;
+             border: 1px solid #ececec; border-radius: 16px; overflow: hidden;
+             box-shadow: 0 12px 32px rgba(0,0,0,0.12); display: none; z-index: 50; }
+  #suggest.rz-show { display: block; animation: rz-pop 0.14s cubic-bezier(0.25,0.8,0.35,1); }
+  @keyframes rz-pop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .rz-sg { display: flex; align-items: center; gap: 12px; padding: 10px 18px; cursor: pointer;
+           font-size: 14px; transition: background 0.12s ease; }
+  .rz-sg:hover, .rz-sg.rz-sel { background: #f1f5ff; }
+  .rz-sg .rz-sg-ic { width: 30px; height: 30px; border-radius: 10px; flex: none;
+                     background: linear-gradient(135deg, #2563eb, #1d4fd7); color: #fff;
+                     display: flex; align-items: center; justify-content: center;
+                     font-size: 13px; font-weight: 700; }
+  .rz-sg .rz-sg-tx { overflow: hidden; }
+  .rz-sg .rz-sg-ti { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rz-sg .rz-sg-ur { font-size: 12px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .section { width: min(740px, 92vw); margin-top: 36px; }
   .section h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
                 color: #9ca3af; margin: 0 0 12px 6px; }
@@ -49,9 +55,10 @@
 </style>
 </head>
 <body>
-  <div id="logo"><img id="logoimg" alt="Rezer"/></div>
-  <h1>Rezer</h1>
-  <div id="search"><input id="q" placeholder="Search Google or enter address" autocomplete="off" spellcheck="false"/></div>
+  <div id="searchwrap">
+    <div id="search"><input id="q" placeholder="Search Google or enter address" autocomplete="off" spellcheck="false"/></div>
+    <div id="suggest"></div>
+  </div>
 
   <div class="section">
     <h2>Pinned</h2>
@@ -67,6 +74,85 @@
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function host(u){ try { return new URL(u).hostname.replace(/^www\./,''); } catch(e){ return u; } }
   function letter(u){ var h = host(u); return (h[0]||'?').toUpperCase(); }
+  function getApi(){ return window.pywebview && window.pywebview.api; }
+
+  /* ---------- search submit (robust) ---------- */
+  function doSearch(value){
+    var v = (value||'').trim();
+    if(!v) return;
+    var api = getApi();
+    if(!api || !api.navigate){
+      // bridge not ready yet — retry briefly, then give up silently
+      var tries = 0;
+      var t = setInterval(function(){
+        var a = getApi();
+        if(a && a.navigate){ clearInterval(t); try { a.navigate(v); } catch(e){} }
+        else if(++tries > 20){ clearInterval(t); }
+      }, 150);
+      return;
+    }
+    try { api.navigate(v); } catch(e){}
+  }
+
+  /* ---------- suggestions ---------- */
+  var sugBox = document.getElementById('suggest');
+  var sugItems = [], sugSel = -1, sugTimer = null;
+  var qInput = document.getElementById('q');
+
+  function hideSug(){ sugBox.classList.remove('rz-show'); sugItems = []; sugSel = -1; }
+
+  function renderSug(items){
+    sugItems = items || []; sugSel = -1;
+    if(!sugItems.length){ hideSug(); return; }
+    var html = '';
+    sugItems.forEach(function(it, i){
+      html += '<div class="rz-sg" data-i="'+i+'">' +
+        '<div class="rz-sg-ic">'+esc(letter(it.url))+'</div>' +
+        '<div class="rz-sg-tx"><div class="rz-sg-ti">'+esc(it.title||host(it.url))+'</div>' +
+        '<div class="rz-sg-ur">'+esc(host(it.url))+'</div></div></div>';
+    });
+    sugBox.innerHTML = html;
+    sugBox.classList.add('rz-show');
+    var rows = sugBox.querySelectorAll('.rz-sg');
+    for(var i=0;i<rows.length;i++){
+      (function(idx){
+        rows[idx].addEventListener('mousedown', function(e){
+          e.preventDefault();
+          doSearch(sugItems[idx].url);
+        });
+        rows[idx].addEventListener('mousemove', function(){ setSel(idx); });
+      })(i);
+    }
+  }
+  function setSel(i){
+    sugSel = i;
+    var rows = sugBox.querySelectorAll('.rz-sg');
+    for(var j=0;j<rows.length;j++) rows[j].classList.toggle('rz-sel', j===i);
+  }
+  function fetchSug(){
+    var v = qInput.value.trim();
+    var api = getApi();
+    if(!v || !api || !api.get_suggestions){ hideSug(); return; }
+    try {
+      api.get_suggestions(v).then(function(items){ renderSug(items); });
+    } catch(e){ hideSug(); }
+  }
+  qInput.addEventListener('input', function(){
+    clearTimeout(sugTimer);
+    sugTimer = setTimeout(fetchSug, 150);
+  });
+  qInput.addEventListener('keydown', function(e){
+    if(sugBox.classList.contains('rz-show') && sugItems.length){
+      if(e.key==='ArrowDown'){ e.preventDefault(); setSel((sugSel+1)%sugItems.length); return; }
+      if(e.key==='ArrowUp'){ e.preventDefault(); setSel((sugSel-1+sugItems.length)%sugItems.length); return; }
+      if(e.key==='Escape'){ hideSug(); return; }
+      if(e.key==='Enter' && sugSel>=0){ e.preventDefault(); doSearch(sugItems[sugSel].url); return; }
+    }
+    if(e.key==='Enter'){ e.preventDefault(); hideSug(); doSearch(e.target.value); }
+  });
+  qInput.addEventListener('blur', function(){ setTimeout(hideSug, 120); });
+
+  /* ---------- tiles ---------- */
   function tile(b, unpin){
     var d = document.createElement('div');
     d.className = 'tile';
@@ -74,47 +160,44 @@
                   '<div class="name">' + esc(b.title || host(b.url)) + '</div>';
     d.title = b.url + (unpin ? ' (right-click to unpin)' : '');
     d.addEventListener('click', function(){
-      var api = window.pywebview && window.pywebview.api;
-      if(api) api.navigate(b.url);
+      var api = getApi();
+      if(api) { try { api.navigate(b.url); } catch(e){} }
     });
     if(unpin){
       d.addEventListener('contextmenu', function(e){
         e.preventDefault();
-        var api = window.pywebview && window.pywebview.api;
-        if(api) api.toggle_pin(b.url).then(init);
+        var api = getApi();
+        if(api) { try { api.toggle_pin(b.url).then(init); } catch(e){} }
       });
     }
     return d;
   }
   function init(){
-    var api = window.pywebview && window.pywebview.api;
+    var api = getApi();
     if(!api){ setTimeout(init, 200); return; }
-    api.asset_url('logo.png').then(function(u){ if(u) document.getElementById('logoimg').src = u; });
-    api.get_state().then(function(s){
-      var p = document.getElementById('pinned');
-      p.innerHTML = '';
-      var pinned = (s.bookmarks||[]).filter(function(b){return b.pinned;});
-      if(!pinned.length) p.innerHTML = '<div class="empty">Star pages with &#9734; in the address bar, then right-click a bookmark to pin it here.</div>';
-      pinned.forEach(function(b){ p.appendChild(tile(b, true)); });
-    });
-    api.get_history().then(function(h){
-      var t = document.getElementById('top');
-      t.innerHTML = '';
-      var seen = {}, n = 0;
-      (h||[]).forEach(function(it){
-        var hh = host(it.url);
-        if(seen[hh] || n>=8) return; seen[hh]=1; n++;
-        t.appendChild(tile({title: host(it.url), url: it.url}));
+    try {
+      api.get_state().then(function(s){
+        var p = document.getElementById('pinned');
+        p.innerHTML = '';
+        var pinned = (s.bookmarks||[]).filter(function(b){return b.pinned;});
+        if(!pinned.length) p.innerHTML = '<div class="empty">Star pages with &#9734; in the address bar, then right-click a bookmark to pin it here.</div>';
+        pinned.forEach(function(b){ p.appendChild(tile(b, true)); });
       });
-      if(!n) t.innerHTML = '<div class="empty">Your most-visited sites will show up here.</div>';
-    });
+    } catch(e){}
+    try {
+      api.get_history().then(function(h){
+        var t = document.getElementById('top');
+        t.innerHTML = '';
+        var seen = {}, n = 0;
+        (h||[]).forEach(function(it){
+          var hh = host(it.url);
+          if(seen[hh] || n>=8) return; seen[hh]=1; n++;
+          t.appendChild(tile({title: host(it.url), url: it.url}));
+        });
+        if(!n) t.innerHTML = '<div class="empty">Your most-visited sites will show up here.</div>';
+      });
+    } catch(e){}
   }
-  document.getElementById('q').addEventListener('keydown', function(e){
-    if(e.key==='Enter'){
-      var api = window.pywebview && window.pywebview.api;
-      if(api) api.navigate(e.target.value);
-    }
-  });
   init();
 </script>
 </body>

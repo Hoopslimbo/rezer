@@ -231,6 +231,13 @@ class Api:
     def get_history(self):
         return self.c["history"].recent(100)
 
+    def get_suggestions(self, query):
+        """Autocomplete suggestions: history entries matching the query."""
+        try:
+            return self.c["history"].search(query or "", limit=8)
+        except Exception:
+            return []
+
     def clear_history(self):
         self.c["history"].clear()
         return True

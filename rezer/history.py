@@ -63,6 +63,26 @@ class HistoryManager:
             ).fetchall()
         return [{"url": u, "title": t, "visits": n} for u, t, n in rows]
 
+    def search(self, query: str, limit: int = 8):
+        """Find history entries matching a query (for autocomplete suggestions).
+
+        Matches against both URL and title, most-recent first. Returns up to
+        `limit` dicts with url/title keys. Empty query returns [].
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+        cutoff = (datetime.datetime.now() - datetime.timedelta(days=7)).isoformat()
+        like = "%" + query + "%"
+        with self._lock, self._connect() as c:
+            rows = c.execute(
+                "SELECT url, title, MAX(visited_at) AS ts FROM visits "
+                "WHERE visited_at >= ? AND (url LIKE ? OR title LIKE ?) "
+                "GROUP BY url ORDER BY ts DESC LIMIT ?",
+                (cutoff, like, like, limit),
+            ).fetchall()
+        return [{"url": u, "title": t} for u, t, _ in rows]
+
     def prune_week(self):
         """Drop anything older than 7 days."""
         cutoff = (datetime.datetime.now() - datetime.timedelta(days=7)).isoformat()

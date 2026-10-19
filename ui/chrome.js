@@ -35,6 +35,7 @@
     '<button class="rz-iconbtn" id="rz-shot" title="Screenshot">&#128247;</button>' +
     '<button class="rz-iconbtn" id="rz-settings" title="Settings">&#9881;</button>' +
     '</div>' +
+    '<div id="rz-suggest"></div>' +
     '<div id="rz-bookmarks"></div>' +
     '<div id="rz-pw-prompt"><span>Save password for this site?</span>' +
     '<button class="rz-primary" id="rz-pw-yes">Save</button>' +
@@ -184,10 +185,76 @@
 
   var addr = document.getElementById('rz-addr');
   addr.addEventListener('focus', function () { addrFocused = true; setTimeout(function(){ addr.select(); }, 0); });
-  addr.addEventListener('blur', function () { addrFocused = false; if (S) renderAddr(S); });
+  addr.addEventListener('blur', function () {
+    addrFocused = false;
+    // delay so a suggestion click (mousedown) lands before we hide
+    setTimeout(function(){ hideAddrSug(); }, 120);
+    if (S) renderAddr(S);
+  });
   addr.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { call('navigate', addr.value); addr.blur(); }
+    if (addrSugOpen()) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); addrSugMove(1); e.stopPropagation(); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); addrSugMove(-1); e.stopPropagation(); return; }
+      if (e.key === 'Escape') { hideAddrSug(); e.stopPropagation(); return; }
+      if (e.key === 'Enter' && addrSugSel >= 0) {
+        e.preventDefault(); e.stopPropagation();
+        var u = addrSugItems[addrSugSel].url;
+        hideAddrSug(); call('navigate', u); addr.blur();
+        return;
+      }
+    }
+    if (e.key === 'Enter') { hideAddrSug(); call('navigate', addr.value); addr.blur(); }
     e.stopPropagation();
+  });
+
+  /* ---------- address bar suggestions ---------- */
+  var addrSugBox = document.getElementById('rz-suggest');
+  var addrSugItems = [], addrSugSel = -1, addrSugTimer = null;
+  function addrSugOpen(){ return addrSugBox.classList.contains('rz-show'); }
+  function hideAddrSug(){ addrSugBox.classList.remove('rz-show'); addrSugItems = []; addrSugSel = -1; }
+  function addrSugMove(d){
+    if(!addrSugItems.length) return;
+    addrSugSel = (addrSugSel + d + addrSugItems.length) % addrSugItems.length;
+    var rows = addrSugBox.querySelectorAll('.rz-sg');
+    for(var i=0;i<rows.length;i++) rows[i].classList.toggle('rz-sel', i===addrSugSel);
+  }
+  function addrSugHost(u){ try { return new URL(u).hostname.replace(/^www\./,''); } catch(e){ return u; } }
+  function renderAddrSug(items){
+    addrSugItems = items || []; addrSugSel = -1;
+    if(!addrSugItems.length){ hideAddrSug(); return; }
+    var html = '';
+    addrSugItems.forEach(function(it, i){
+      var h = addrSugHost(it.url);
+      var letter = (h[0]||'?').toUpperCase();
+      html += '<div class="rz-sg" data-i="'+i+'">' +
+        '<div class="rz-sg-ic">'+esc(letter)+'</div>' +
+        '<div class="rz-sg-tx"><div class="rz-sg-ti">'+esc(it.title||h)+'</div>' +
+        '<div class="rz-sg-ur">'+esc(h)+'</div></div></div>';
+    });
+    addrSugBox.innerHTML = html;
+    addrSugBox.classList.add('rz-show');
+    var rows = addrSugBox.querySelectorAll('.rz-sg');
+    for(var i=0;i<rows.length;i++){
+      (function(idx){
+        rows[idx].addEventListener('mousedown', function(e){
+          e.preventDefault(); e.stopPropagation();
+          var u = addrSugItems[idx].url;
+          hideAddrSug(); call('navigate', u); addr.blur();
+        });
+        rows[idx].addEventListener('mousemove', function(){
+          addrSugSel = idx;
+          for(var j=0;j<rows.length;j++) rows[j].classList.toggle('rz-sel', j===idx);
+        });
+      })(i);
+    }
+  }
+  addr.addEventListener('input', function(){
+    clearTimeout(addrSugTimer);
+    addrSugTimer = setTimeout(function(){
+      var v = addr.value.trim();
+      if(!v){ hideAddrSug(); return; }
+      call('get_suggestions', v).then(function(items){ renderAddrSug(items); });
+    }, 150);
   });
 
   // menu

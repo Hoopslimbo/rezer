@@ -172,6 +172,37 @@
 }
 #rezer-chrome.rz-private #rz-private-badge { display: inline-block; }
 
+/* ---- address bar suggestions ---- */
+#rz-suggest {
+  position: absolute;
+  top: 88px; /* tabs (36) + nav (46) + small gap */
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(620px, 70vw);
+  background: var(--rz-bg);
+  border: 1px solid var(--rz-border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.14);
+  display: none;
+  z-index: 20;
+}
+#rz-suggest.rz-show { display: block; animation: rz-sg-pop 0.14s cubic-bezier(0.25,0.8,0.35,1); }
+@keyframes rz-sg-pop { from { opacity: 0; transform: translateX(-50%) translateY(-6px); } to { opacity: 1; transform: translateX(-50%); } }
+#rz-suggest .rz-sg { display: flex; align-items: center; gap: 12px; padding: 9px 16px; cursor: pointer;
+                     transition: background 0.12s ease; }
+#rz-suggest .rz-sg:hover, #rz-suggest .rz-sg.rz-sel { background: var(--rz-hover); }
+#rz-suggest .rz-sg-ic { width: 30px; height: 30px; border-radius: 10px; flex: none;
+                        background: linear-gradient(135deg, var(--rz-accent), #1d4fd7); color: #fff;
+                        display: flex; align-items: center; justify-content: center;
+                        font-size: 13px; font-weight: 700;
+                        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28); }
+#rz-suggest .rz-sg-tx { overflow: hidden; }
+#rz-suggest .rz-sg-ti { font-size: 13.5px; font-weight: 600; color: var(--rz-text);
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rz-suggest .rz-sg-ur { font-size: 12px; color: var(--rz-muted);
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ---- bookmark bar ---- */
 #rz-bookmarks {
   display: flex;
