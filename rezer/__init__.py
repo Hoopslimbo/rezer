@@ -1,4 +1,4 @@
 """Rezer - a lightweight native Windows web browser (WebView2 via pywebview)."""
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __app_name__ = "Rezer"
