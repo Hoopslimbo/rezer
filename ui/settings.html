@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Settings - Rezer</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 28px;
+         background: #fff; color: #1a1a1a; max-width: 720px; }
+  h1 { font-size: 24px; margin: 0 0 20px 0; }
+  h2 { font-size: 15px; margin: 26px 0 10px 0; color: #374151; }
+  .row { display: flex; align-items: center; justify-content: space-between;
+         padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+  .row .desc { color: #6b7280; font-size: 12px; margin-top: 2px; }
+  input[type="color"] { width: 48px; height: 32px; border: 1px solid #e2e2e2;
+                        border-radius: 6px; cursor: pointer; background: none; padding: 2px; }
+  .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; cursor: pointer; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: #d1d5db; border-radius: 24px; transition: .2s; }
+  .slider:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px;
+                   background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider { background: #2563eb; }
+  .switch input:checked + .slider:before { transform: translateX(18px); }
+  select { font-size: 14px; padding: 6px 10px; border: 1px solid #e2e2e2; border-radius: 8px; }
+  button.action { border: 1px solid #e2e2e2; background: #f7f7f8; border-radius: 8px;
+                  padding: 7px 16px; cursor: pointer; font-size: 13px; }
+  button.action:hover { background: #eee; }
+  button.danger { color: #dc2626; }
+  .list { margin-top: 6px; }
+  .list .li { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+              border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+  .list .li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .list .li button { border: none; background: none; color: #dc2626; cursor: pointer; font-size: 13px; }
+  .empty { color: #9ca3af; font-size: 13px; padding: 6px 0; }
+  #ver { margin-top: 30px; color: #9ca3af; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>Settings</h1>
+
+  <h2>Appearance</h2>
+  <div class="row">
+    <div>Theme color<div class="desc">Pick any color for the browser chrome.</div></div>
+    <input type="color" id="theme" value="#ffffff">
+  </div>
+  <div class="row">
+    <div>Show bookmark bar<div class="desc">Bar under the address bar.</div></div>
+    <label class="switch"><input type="checkbox" id="bmbar"><span class="slider"></span></label>
+  </div>
+
+  <h2>Privacy</h2>
+  <div class="row">
+    <div>Ad blocker<div class="desc">Blocks common ad and tracker domains.</div></div>
+    <label class="switch"><input type="checkbox" id="adblock"><span class="slider"></span></label>
+  </div>
+  <div class="row">
+    <div>Restore tabs on startup<div class="desc">Reopen your last tabs.</div></div>
+    <label class="switch"><input type="checkbox" id="restore"><span class="slider"></span></label>
+  </div>
+  <div class="row">
+    <div>History<div class="desc">Kept 7 days, wiped every Sunday.</div></div>
+    <button class="action danger" id="clearhist">Clear now</button>
+  </div>
+
+  <h2>Search</h2>
+  <div class="row">
+    <div>Default search engine</div>
+    <select id="engine">
+      <option value="google">Google</option>
+      <option value="bing">Bing</option>
+      <option value="duckduckgo">DuckDuckGo</option>
+    </select>
+  </div>
+
+  <h2>Bookmarks</h2>
+  <div class="list" id="bmlist"></div>
+
+  <h2>Saved passwords</h2>
+  <div class="list" id="pwlist"></div>
+
+  <h2>Updates</h2>
+  <div class="row">
+    <div>Rezer updates itself automatically.</div>
+    <button class="action" id="checkup">Check now</button>
+  </div>
+
+  <div id="ver"></div>
+
+<script>
+  var api = null;
+  function ready(fn){
+    api = window.pywebview && window.pywebview.api;
+    if(api) fn(); else setTimeout(function(){ready(fn);}, 200);
+  }
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+  ready(function(){
+    api.get_settings().then(function(s){
+      document.getElementById('theme').value = s.theme_color || '#ffffff';
+      document.getElementById('bmbar').checked = !!s.bookmark_bar_visible;
+      document.getElementById('adblock').checked = !!s.adblock_enabled;
+      document.getElementById('restore').checked = !!s.restore_tabs;
+      document.getElementById('engine').value = s.search_engine || 'google';
+      renderBookmarks(s.bookmarks || []);
+    });
+    api.get_state().then(function(s){
+      document.getElementById('ver').textContent = 'Rezer ' + '0.1.0';
+    });
+    loadPasswords();
+  });
+
+  function bind(id, key, isColor){
+    document.getElementById(id).addEventListener(isColor ? 'input' : 'change', function(e){
+      var v = isColor ? e.target.value : (e.target.type === 'checkbox' ? e.target.checked : e.target.value);
+      api.set_setting(key, v);
+    });
+  }
+  bind('theme', 'theme_color', true);
+  bind('bmbar', 'bookmark_bar_visible');
+  bind('adblock', 'adblock_enabled');
+  bind('restore', 'restore_tabs');
+  bind('engine', 'search_engine');
+
+  document.getElementById('clearhist').addEventListener('click', function(){
+    if(confirm('Clear all browsing history?')) api.clear_history();
+  });
+  document.getElementById('checkup').addEventListener('click', function(){
+    api.check_update_now().then(function(r){
+      alert(r && r.update ? ('Update available: ' + r.tag + ' — it will install automatically.')
+                         : 'You are on the latest version.');
+    });
+  });
+
+  function renderBookmarks(list){
+    var el = document.getElementById('bmlist');
+    el.innerHTML = '';
+    if(!list.length){ el.innerHTML = '<div class="empty">No bookmarks yet.</div>'; return; }
+    list.forEach(function(b){
+      var d = document.createElement('div');
+      d.className = 'li';
+      d.innerHTML = '<span>' + esc(b.title) + ' <span style="color:#9ca3af">' +
+                    esc(b.url) + '</span>' + (b.pinned ? ' &#9733;' : '') + '</span>';
+      var del = document.createElement('button');
+      del.textContent = 'Remove';
+      del.addEventListener('click', function(){
+        api.remove_bookmark(b.url).then(function(){ api.get_settings().then(function(s){ renderBookmarks(s.bookmarks||[]); }); });
+      });
+      d.appendChild(del);
+      el.appendChild(d);
+    });
+  }
+
+  function loadPasswords(){
+    // passwords aren't exposed in bulk for safety; show count only
+    var el = document.getElementById('pwlist');
+    el.innerHTML = '<div class="empty">Saved logins are encrypted on this PC. ' +
+      'They fill automatically when you visit a saved site.</div>';
+  }
+</script>
+</body>
+</html>

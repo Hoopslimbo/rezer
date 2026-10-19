@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>History - Rezer</title>
+<style>
+  body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 24px;
+         background: #fff; color: #1a1a1a; }
+  h1 { font-size: 22px; margin: 0 0 4px 0; }
+  p.sub { color: #6b7280; font-size: 13px; margin: 0 0 16px 0; }
+  #clear { border: 1px solid #e2e2e2; background: #f3f4f6; border-radius: 8px;
+           padding: 7px 16px; cursor: pointer; font-size: 13px; margin-bottom: 16px; }
+  #clear:hover { background: #e5e7eb; }
+  .item { display: flex; gap: 12px; padding: 8px 4px; border-bottom: 1px solid #f0f0f0;
+          font-size: 13px; align-items: baseline; }
+  .item a { color: #1a1a1a; text-decoration: none; flex: 1; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; }
+  .item a:hover { text-decoration: underline; }
+  .item .t { color: #6b7280; font-size: 12px; white-space: nowrap; }
+  .empty { color: #6b7280; padding: 24px 0; }
+</style>
+</head>
+<body>
+  <h1>History</h1>
+  <p class="sub">Past 7 days. Cleared automatically every Sunday.</p>
+  <button id="clear">Clear history</button>
+  <div id="list"></div>
+<script>
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function load(){
+    var api = window.pywebview && window.pywebview.api;
+    if(!api){ setTimeout(load, 200); return; }
+    api.get_history().then(function(items){
+      var list = document.getElementById('list');
+      list.innerHTML = '';
+      if(!items || !items.length){
+        list.innerHTML = '<div class="empty">No history yet.</div>'; return;
+      }
+      items.forEach(function(it){
+        var d = document.createElement('div');
+        d.className = 'item';
+        d.innerHTML = '<a href="#">' + esc(it.title || it.url) + '</a>' +
+                      '<span class="t">' + esc(it.visited_at || '') + '</span>';
+        d.querySelector('a').addEventListener('click', function(e){
+          e.preventDefault(); api.navigate(it.url);
+        });
+        list.appendChild(d);
+      });
+    });
+  }
+  document.getElementById('clear').addEventListener('click', function(){
+    var api = window.pywebview && window.pywebview.api;
+    if(api) api.clear_history().then(load);
+  });
+  load();
+</script>
+</body>
+</html>

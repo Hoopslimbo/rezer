@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>New Tab - Rezer</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center; padding-top: 12vh;
+         background: #fff; color: #1a1a1a; }
+  #logo { width: 72px; height: 72px; margin-bottom: 18px; }
+  #logo img { width: 100%; height: 100%; object-fit: contain; }
+  h1 { font-size: 30px; font-weight: 600; margin: 0 0 22px 0; letter-spacing: 1px; }
+  #search { width: min(560px, 86vw); display: flex; }
+  #q { flex: 1; height: 46px; border: 1px solid #e2e2e2; border-radius: 23px;
+       padding: 0 22px; font-size: 15px; outline: none; background: #f7f7f8; }
+  #q:focus { border-color: #2563eb; background: #fff; }
+  .section { width: min(720px, 92vw); margin-top: 34px; }
+  .section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+                color: #6b7280; margin: 0 0 10px 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .tile { border: 1px solid #eee; border-radius: 12px; padding: 14px 10px; text-align: center;
+          cursor: pointer; background: #fff; }
+  .tile:hover { background: #f7f7f8; border-color: #2563eb; }
+  .tile .fav { width: 28px; height: 28px; margin: 0 auto 8px auto; border-radius: 8px;
+               background: #2563eb; color: #fff; display: flex; align-items: center;
+               justify-content: center; font-size: 15px; font-weight: 700; }
+  .tile .name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: #9ca3af; font-size: 13px; padding: 8px 4px; }
+</style>
+</head>
+<body>
+  <div id="logo"><img id="logoimg" alt="Rezer"/></div>
+  <h1>Rezer</h1>
+  <div id="search"><input id="q" placeholder="Search Google or enter address" autocomplete="off" spellcheck="false"/></div>
+
+  <div class="section">
+    <h2>Pinned</h2>
+    <div class="grid" id="pinned"></div>
+  </div>
+  <div class="section">
+    <h2>Top sites</h2>
+    <div class="grid" id="top"></div>
+  </div>
+
+<script>
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function host(u){ try { return new URL(u).hostname.replace(/^www\./,''); } catch(e){ return u; } }
+  function letter(u){ var h = host(u); return (h[0]||'?').toUpperCase(); }
+  function tile(b, unpin){
+    var d = document.createElement('div');
+    d.className = 'tile';
+    d.innerHTML = '<div class="fav">' + esc(letter(b.url)) + '</div>' +
+                  '<div class="name">' + esc(b.title || host(b.url)) + '</div>';
+    d.title = b.url + (unpin ? ' (right-click to unpin)' : '');
+    d.addEventListener('click', function(){
+      var api = window.pywebview && window.pywebview.api;
+      if(api) api.navigate(b.url);
+    });
+    if(unpin){
+      d.addEventListener('contextmenu', function(e){
+        e.preventDefault();
+        var api = window.pywebview && window.pywebview.api;
+        if(api) api.toggle_pin(b.url).then(init);
+      });
+    }
+    return d;
+  }
+  function init(){
+    var api = window.pywebview && window.pywebview.api;
+    if(!api){ setTimeout(init, 200); return; }
+    api.asset_url('logo.png').then(function(u){ if(u) document.getElementById('logoimg').src = u; });
+    api.get_state().then(function(s){
+      var p = document.getElementById('pinned');
+      p.innerHTML = '';
+      var pinned = (s.bookmarks||[]).filter(function(b){return b.pinned;});
+      if(!pinned.length) p.innerHTML = '<div class="empty">Star pages with &#9734; in the address bar, then right-click a bookmark to pin it here.</div>';
+      pinned.forEach(function(b){ p.appendChild(tile(b, true)); });
+    });
+    api.get_history().then(function(h){
+      var t = document.getElementById('top');
+      t.innerHTML = '';
+      var seen = {}, n = 0;
+      (h||[]).forEach(function(it){
+        var hh = host(it.url);
+        if(seen[hh] || n>=8) return; seen[hh]=1; n++;
+        t.appendChild(tile({title: host(it.url), url: it.url}));
+      });
+      if(!n) t.innerHTML = '<div class="empty">Your most-visited sites will show up here.</div>';
+    });
+  }
+  document.getElementById('q').addEventListener('keydown', function(e){
+    if(e.key==='Enter'){
+      var api = window.pywebview && window.pywebview.api;
+      if(api) api.navigate(e.target.value);
+    }
+  });
+  init();
+</script>
+</body>
+</html>

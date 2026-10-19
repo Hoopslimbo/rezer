@@ -1,0 +1,5 @@
+# Rezer browser runtime dependencies (Windows)
+pywebview>=4.4
+cryptography>=41.0
+requests>=2.31
+mss>=9.0
