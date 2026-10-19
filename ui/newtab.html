@@ -5,28 +5,47 @@
 <title>New Tab - Rezer</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; min-height: 100vh;
-         display: flex; flex-direction: column; align-items: center; padding-top: 12vh;
-         background: #fff; color: #1a1a1a; }
-  #logo { width: 72px; height: 72px; margin-bottom: 18px; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; margin: 0; min-height: 100vh;
+         display: flex; flex-direction: column; align-items: center; padding-top: 11vh;
+         background: #fff; color: #1a1a1a;
+         background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(37,99,235,0.06), transparent); }
+  #logo { width: 76px; height: 76px; margin-bottom: 16px;
+          filter: drop-shadow(0 6px 18px rgba(37,99,235,0.25));
+          transition: transform 0.25s cubic-bezier(0.25,0.8,0.35,1); }
+  #logo:hover { transform: scale(1.06) rotate(-3deg); }
   #logo img { width: 100%; height: 100%; object-fit: contain; }
-  h1 { font-size: 30px; font-weight: 600; margin: 0 0 22px 0; letter-spacing: 1px; }
-  #search { width: min(560px, 86vw); display: flex; }
-  #q { flex: 1; height: 46px; border: 1px solid #e2e2e2; border-radius: 23px;
-       padding: 0 22px; font-size: 15px; outline: none; background: #f7f7f8; }
-  #q:focus { border-color: #2563eb; background: #fff; }
-  .section { width: min(720px, 92vw); margin-top: 34px; }
-  .section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
-                color: #6b7280; margin: 0 0 10px 4px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
-  .tile { border: 1px solid #eee; border-radius: 12px; padding: 14px 10px; text-align: center;
-          cursor: pointer; background: #fff; }
-  .tile:hover { background: #f7f7f8; border-color: #2563eb; }
-  .tile .fav { width: 28px; height: 28px; margin: 0 auto 8px auto; border-radius: 8px;
-               background: #2563eb; color: #fff; display: flex; align-items: center;
-               justify-content: center; font-size: 15px; font-weight: 700; }
-  .tile .name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .empty { color: #9ca3af; font-size: 13px; padding: 8px 4px; }
+  h1 { font-size: 32px; font-weight: 700; margin: 0 0 24px 0; letter-spacing: 3px;
+       background: linear-gradient(120deg, #1a1a1a 30%, #2563eb 100%);
+       -webkit-background-clip: text; background-clip: text;
+       -webkit-text-fill-color: transparent; }
+  #search { width: min(580px, 86vw); display: flex;
+            filter: drop-shadow(0 4px 16px rgba(0,0,0,0.07)); }
+  #q { flex: 1; height: 50px; border: 1.5px solid transparent; border-radius: 25px;
+       padding: 0 24px; font-size: 15px; outline: none; background: #f4f5f7; color: #1a1a1a;
+       transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease; }
+  #q::placeholder { color: #9ca3af; }
+  #q:hover { background: #eceef1; }
+  #q:focus { border-color: #2563eb; background: #fff;
+             box-shadow: 0 0 0 4px rgba(37,99,235,0.13); }
+  .section { width: min(740px, 92vw); margin-top: 36px; }
+  .section h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+                color: #9ca3af; margin: 0 0 12px 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid #f0f0f0; border-radius: 16px; padding: 16px 10px 14px 10px; text-align: center;
+          cursor: pointer; background: #fff;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+          transition: transform 0.16s cubic-bezier(0.25,0.8,0.35,1), box-shadow 0.16s ease,
+                      border-color 0.16s ease; }
+  .tile:hover { transform: translateY(-3px); border-color: #2563eb;
+                box-shadow: 0 8px 22px rgba(37,99,235,0.14); }
+  .tile:active { transform: translateY(-1px) scale(0.98); }
+  .tile .fav { width: 34px; height: 34px; margin: 0 auto 10px auto; border-radius: 11px;
+               background: linear-gradient(135deg, #2563eb, #1d4fd7); color: #fff;
+               display: flex; align-items: center; justify-content: center;
+               font-size: 16px; font-weight: 700;
+               box-shadow: 0 3px 10px rgba(37,99,235,0.3); }
+  .tile .name { font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: #9ca3af; font-size: 13px; padding: 10px 6px; }
 </style>
 </head>
 <body>
