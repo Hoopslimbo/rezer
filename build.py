@@ -23,13 +23,17 @@ def main():
         "rezer.py",
         "--onefile",
         "--windowed",          # no console window
+        "--noupx",             # UPX packing triggers Defender heuristics; skip it
         "--name", "Rezer",
         "--icon", os.path.join("assets", "logo.ico"),
+        "--version-file", os.path.join(HERE, "version_info.txt"),
         "--add-data", f"ui{sep}ui",
         "--add-data", f"assets{sep}assets",
         # keep these out of the bundle scan noise but ensure they're included
         "--hidden-import", "cryptography",
         "--hidden-import", "mss",
+        "--hidden-import", "requests",
+        "--hidden-import", "webview",
         "--clean",
         "--noconfirm",
     ]

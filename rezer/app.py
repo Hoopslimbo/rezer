@@ -1,6 +1,9 @@
 """Rezer application: windows, chrome injection, lifecycle."""
 
+import json
 import os
+import time
+import traceback
 
 import webview
 
@@ -10,7 +13,7 @@ from .api import Api
 from .bookmarks import BookmarkManager
 from .history import HistoryManager
 from .passwords import PasswordManager
-from .paths import resource_path
+from .paths import data_dir, resource_path
 from .settings import SettingsManager
 from .tabs import TabManager
 
@@ -68,11 +71,37 @@ class RezerApp:
         self.history.prune_week()
         self.history.maybe_sunday_clear(self.settings)
 
+        # Fail loudly (not silently) if bundled resources are missing —
+        # a missing ui/ or assets/ in the exe means a broken build.
+        for label, path in (
+            ("chrome CSS", CHROME_CSS_PATH),
+            ("chrome JS", CHROME_JS_PATH),
+            ("new-tab page", NEWTAB_PATH),
+            ("settings page", SETTINGS_PATH),
+            ("history page", HISTORY_PATH),
+        ):
+            if not os.path.isfile(path):
+                raise RuntimeError(
+                    "Rezer is missing its %s (%s). The install may be corrupt — "
+                    "try reinstalling." % (label, path)
+                )
+
         with open(CHROME_CSS_PATH, encoding="utf-8") as f:
             self.chrome_css = f.read()
         with open(CHROME_JS_PATH, encoding="utf-8") as f:
             self.chrome_js = f.read()
         self.adblock_js = adblock_mod.injection_js()
+
+    @staticmethod
+    def _log(msg: str):
+        """Append to %APPDATA%/Rezer/debug.log — the injection path used to
+        fail silently, which made UI bugs impossible to diagnose."""
+        try:
+            p = os.path.join(data_dir(), "debug.log")
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(time.strftime("[%Y-%m-%d %H:%M:%S] ") + msg + "\n")
+        except OSError:
+            pass
 
     # ---------- window management ----------
 
@@ -131,6 +160,14 @@ class RezerApp:
             return
         cur = normalize_url(cur)
 
+        # The JS API bridge (window.pywebview.api) is created by pywebview
+        # AFTER the page's load event fires. Injecting the chrome before the
+        # bridge exists meant get_state()/etc. silently returned null, so the
+        # tab strip, address bar and bookmarks rendered empty ("buggy UI").
+        # Wait for the bridge (up to ~6s), then inject.
+        if not self._wait_for_bridge(w):
+            self._log("bridge timeout on " + cur[:120])
+
         self._inject(entry)
 
         tab = entry["tabs"].active()
@@ -148,25 +185,46 @@ class RezerApp:
         except Exception:
             pass
 
+    def _wait_for_bridge(self, w, timeout: float = 6.0) -> bool:
+        """Poll until window.pywebview.api exists. Returns False on timeout."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                if w.evaluate_js("!!(window.pywebview && window.pywebview.api)"):
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.15)
+        return False
+
     def _inject(self, entry):
         w = entry["window"]
-        css = self.chrome_css.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
-        js = self.chrome_js
+        # json.dumps produces a correctly-escaped JS string literal — safer
+        # than hand-escaping backslashes/backticks/${ for a template literal.
+        css_lit = json.dumps(self.chrome_css)
         payload = (
             "(function(){"
             "if(window.__rezerChrome){return;}"
             "var st=document.createElement('style');st.id='rezer-chrome-css';"
-            "st.textContent=`" + css + "`;"
+            "st.textContent=" + css_lit + ";"
             "(document.head||document.documentElement).appendChild(st);"
             "})();"
         )
         try:
             w.evaluate_js(payload)
-            w.evaluate_js(js)
-            if self.settings.get("adblock_enabled"):
-                w.evaluate_js(self.adblock_js)
         except Exception:
-            pass
+            self._log("CSS inject failed:\n" + traceback.format_exc())
+            return
+        try:
+            w.evaluate_js(self.chrome_js)
+        except Exception:
+            self._log("chrome.js inject failed:\n" + traceback.format_exc())
+            return
+        if self.settings.get("adblock_enabled"):
+            try:
+                w.evaluate_js(self.adblock_js)
+            except Exception:
+                self._log("adblock inject failed:\n" + traceback.format_exc())
 
     def _on_closing(self, entry):
         # persist tabs for restore (non-private only)

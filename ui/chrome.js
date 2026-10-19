@@ -264,10 +264,17 @@
     addMsg('thinking', 'Luna is thinking…');
     call('luna_explain', sel);
   });
-  // Luna logo
-  call('luna_logo').then(function (u) {
-    if (u) document.getElementById('rz-luna-logo').src = u;
-  });
+  // Luna logo — retry a few times; the bridge may lag the injection
+  (function pullLogo(tries) {
+    var a = api();
+    if (a && a.luna_logo) {
+      a.luna_logo().then(function (u) {
+        if (u) document.getElementById('rz-luna-logo').src = u;
+      });
+      return;
+    }
+    if (tries < 20) setTimeout(function () { pullLogo(tries + 1); }, 300);
+  })(0);
 
   /* ---------- password manager ---------- */
   var pendingCreds = null;
@@ -330,7 +337,16 @@
     } catch (e) {}
   }, 500);
 
-  // initial state pull
-  call('get_state').then(function (s) { if (s) window.RezerChrome.sync(s); });
+  // initial state pull — retry until the pywebview JS bridge is ready.
+  // (The host waits for the bridge before injecting, but on slow machines
+  // the bridge can still lag a moment behind the injection.)
+  (function pullState(tries) {
+    var a = api();
+    if (a && a.get_state) {
+      a.get_state().then(function (s) { if (s) window.RezerChrome.sync(s); });
+      return;
+    }
+    if (tries < 50) setTimeout(function () { pullState(tries + 1); }, 300);
+  })(0);
   padPage();
 })();

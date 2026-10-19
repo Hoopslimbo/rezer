@@ -74,6 +74,29 @@ Output: `dist/Rezer.exe` — a single file, no installer needed. Copy it anywher
 workflow builds `Rezer.exe` on a Windows runner and uploads it as an artifact
 (a release asset for tags). The in-app updater checks those releases.
 
+## If Windows Defender removes Rezer.exe
+
+PyInstaller-built apps sometimes get flagged as malware by Windows Defender
+(a common false positive — the exe is just a bundled Python app, not a virus).
+If Rezer.exe disappears right after downloading or launching:
+
+1. Open **Windows Security** → **Virus & threat protection** → **Protection history**
+2. Find the Rezer entry → **Actions** → **Restore**
+3. Add an exclusion so it doesn't happen again: **Virus & threat protection** →
+   **Manage settings** → **Exclusions** → **Add or remove exclusions** →
+   **Add an exclusion** → **File** → select `Rezer.exe`
+
+The build now ships with `--noupx` and full Windows version metadata, which
+reduces (but can't fully eliminate) false-positive detections.
+
+## Troubleshooting
+
+- **Rezer won't start / shows an error:** details go to `%APPDATA%\Rezer\crash.log`.
+- **UI looks broken or half-loaded:** injection errors go to
+  `%APPDATA%\Rezer\debug.log` — include it when reporting the bug.
+- **WebView2 missing:** Rezer needs the Microsoft Edge WebView2 Runtime
+  (preinstalled on Windows 10/11). Get it from Microsoft's site if pages won't load.
+
 ## Honest limitations (v1)
 
 - **Ad blocking** is in-page (fetch/XHR patching + element hiding), not network-level —
