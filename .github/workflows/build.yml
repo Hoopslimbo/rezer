@@ -25,15 +25,32 @@ jobs:
       - name: Build exe
         run: python build.py
 
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        run: |
+          $iss = (Get-Content installer.iss) -replace '#define MyAppVersion ".*"', '#define MyAppVersion "${{ github.ref_name }}"'
+          $iss | Set-Content installer.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
       - name: Upload exe artifact
         uses: actions/upload-artifact@v4
         with:
           name: Rezer-windows
           path: dist/Rezer.exe
 
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rezer-installer
+          path: dist-installer/Rezer-Setup.exe
+
       - name: Create GitHub release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Rezer.exe
+          files: |
+            dist/Rezer.exe
+            dist-installer/Rezer-Setup.exe
           generate_release_notes: true
