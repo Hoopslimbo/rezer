@@ -122,10 +122,12 @@
     if(!sugItems.length){ hideSug(); return; }
     var html = '';
     sugItems.forEach(function(it, i){
+      var icon = it.kind==='search' ? '&#8981;' : esc(letter(it.url));
+      var sub = it.sub || host(it.url);
       html += '<div class="rz-sg" data-i="'+i+'">' +
-        '<div class="rz-sg-ic">'+esc(letter(it.url))+'</div>' +
+        '<div class="rz-sg-ic">'+icon+'</div>' +
         '<div class="rz-sg-tx"><div class="rz-sg-ti">'+esc(it.title||host(it.url))+'</div>' +
-        '<div class="rz-sg-ur">'+esc(host(it.url))+'</div></div></div>';
+        '<div class="rz-sg-ur">'+esc(sub)+'</div></div></div>';
     });
     sugBox.innerHTML = html;
     sugBox.classList.add('rz-show');
@@ -145,12 +147,29 @@
     var rows = sugBox.querySelectorAll('.rz-sg');
     for(var j=0;j<rows.length;j++) rows[j].classList.toggle('rz-sel', j===i);
   }
+  function mergeSug(gs){
+    if(!gs || !gs.length) return;
+    var seen = {};
+    sugItems.forEach(function(it){ seen[(it.title||'').toLowerCase()]=1; seen[it.url]=1; });
+    var add = gs.filter(function(g){ return !seen[(g.title||'').toLowerCase()] && !seen[g.url]; });
+    if(add.length) renderSug(sugItems.concat(add).slice(0, 10));
+  }
   function fetchSug(){
     var v = qInput.value.trim();
     var api = getApi();
     if(!v || !api || !api.get_suggestions){ hideSug(); return; }
     try {
-      api.get_suggestions(v).then(function(items){ renderSug(items); });
+      api.get_suggestions(v).then(function(items){
+        if(qInput.value.trim() !== v) return;
+        renderSug(items || []);
+        // Google suggestions too — so this works even with empty history
+        if(api.google_suggestions){
+          api.google_suggestions(v).then(function(gs){
+            if(qInput.value.trim() !== v) return;
+            mergeSug(gs || []);
+          });
+        }
+      });
     } catch(e){ hideSug(); }
   }
   qInput.addEventListener('input', function(){

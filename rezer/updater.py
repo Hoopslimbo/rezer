@@ -41,9 +41,10 @@ def check_for_update():
         tag = (data.get("tag_name") or "").strip()
         if not tag or _version_tuple(tag) <= _version_tuple(__version__):
             return None
+        # Releases also ship Rezer-Setup.exe (the installer). The updater must
+        # swap in ONLY the browser executable itself — match the exact name.
         for a in data.get("assets", []):
-            name = a.get("name", "")
-            if name.lower().endswith(".exe"):
+            if a.get("name", "").lower() == "rezer.exe":
                 return tag, a.get("browser_download_url")
         return None
     except requests.RequestException:

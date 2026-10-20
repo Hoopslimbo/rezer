@@ -9,6 +9,8 @@ import json
 import os
 import threading
 
+import requests
+
 from . import luna as luna_ai
 from . import screenshot as screenshot_mod
 from .paths import resource_path
@@ -94,6 +96,15 @@ class Api:
     def switch_tab(self, tab_id):
         self.c["tabs"].switch(int(tab_id))
         self._load_active()
+
+    def cycle_tab(self, delta=1):
+        """Ctrl+Tab / Ctrl+Shift+Tab: move to the next/previous tab (wraps)."""
+        tabs = self.c["tabs"]
+        if len(tabs.tabs) <= 1:
+            return
+        idx = next((i for i, t in enumerate(tabs.tabs) if t.id == tabs.active_id), 0)
+        nxt = tabs.tabs[(idx + int(delta)) % len(tabs.tabs)]
+        self.switch_tab(nxt.id)
 
     # ---------- navigation ----------
 
@@ -240,6 +251,41 @@ class Api:
             return self.c["history"].search(query or "", limit=8)
         except Exception:
             return []
+
+    def google_suggestions(self, query):
+        """Google search suggestions for the query (needs internet).
+
+        Fetched here (not from page JS) so CORS can't block it. Returned in
+        the same shape as history suggestions, tagged kind='search', with the
+        url pointing at the results page — so the dropdown can show these
+        even when local history is empty (fresh install).
+        """
+        q = (query or "").strip()
+        if not q:
+            return []
+        try:
+            r = requests.get(
+                "https://suggestqueries.google.com/complete/search",
+                params={"client": "firefox", "q": q},
+                timeout=2.5,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+            )
+            r.raise_for_status()
+            data = r.json()
+        except Exception:
+            return []
+        out = []
+        for s in (data[1] if isinstance(data, list) and len(data) > 1 else []):
+            if isinstance(s, str) and s.strip() and s.strip().lower() != q.lower():
+                out.append({
+                    "title": s,
+                    "url": self.c["settings"].search_url(s),
+                    "kind": "search",
+                    "sub": "Search",
+                })
+            if len(out) >= 6:
+                break
+        return out
 
     def clear_history(self):
         self.c["history"].clear()

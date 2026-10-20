@@ -248,6 +248,38 @@ class TestTabs:
         assert not t.can_forward()
         assert t.url == "https://c.com/"
 
+    def test_close_active_activates_right_neighbor(self):
+        """Chrome behavior: closing the active tab activates the tab that
+        slid into its slot (right neighbor), not the last tab."""
+        from rezer.tabs import TabManager
+        tm = TabManager("rezer://newtab")
+        a = tm.new_tab("https://a.com/")
+        b = tm.new_tab("https://b.com/")
+        c = tm.new_tab("https://c.com/")
+        d = tm.new_tab("https://d.com/")
+        tm.switch(b.id)
+        tm.close_tab(b.id)
+        assert tm.active().id == c.id  # right neighbor, NOT d (the last tab)
+
+    def test_close_last_tab_activates_left_neighbor(self):
+        from rezer.tabs import TabManager
+        tm = TabManager("rezer://newtab")
+        a = tm.new_tab("https://a.com/")
+        b = tm.new_tab("https://b.com/")
+        # b is active and rightmost
+        tm.close_tab(b.id)
+        assert tm.active().id == a.id
+
+    def test_close_inactive_tab_keeps_active(self):
+        from rezer.tabs import TabManager
+        tm = TabManager("rezer://newtab")
+        a = tm.new_tab("https://a.com/")
+        b = tm.new_tab("https://b.com/")
+        c = tm.new_tab("https://c.com/")
+        # c is active; closing a must not change the active tab
+        tm.close_tab(a.id)
+        assert tm.active().id == c.id
+
     def test_urls_excludes_rezer(self):
         from rezer.tabs import TabManager
         tm = TabManager("rezer://newtab")
@@ -379,6 +411,44 @@ class TestUpdater:
         def boom(*a, **k):
             raise requests.RequestException("nope")
         monkeypatch.setattr(up.requests, "get", boom)
+        assert up.check_for_update() is None
+
+    def test_check_for_update_picks_rezer_exe_not_installer(self, monkeypatch):
+        """Releases ship BOTH Rezer.exe and Rezer-Setup.exe (installer).
+        Even when the installer is listed first, the updater must pick the
+        browser exe — swapping the installer in as the browser would break it."""
+        import rezer.updater as up
+
+        class FakeResp:
+            def raise_for_status(self): pass
+            def json(self):
+                return {"tag_name": "v9.9.9",
+                        "assets": [
+                            {"name": "Rezer-Setup.exe",
+                             "browser_download_url": "https://example.com/Rezer-Setup.exe"},
+                            {"name": "Rezer.exe",
+                             "browser_download_url": "https://example.com/Rezer.exe"},
+                        ]}
+
+        monkeypatch.setattr(up.requests, "get", lambda *a, **k: FakeResp())
+        monkeypatch.setattr(up, "__version__", "0.1.3")
+        result = up.check_for_update()
+        assert result is not None
+        assert result[1] == "https://example.com/Rezer.exe"
+
+    def test_check_for_update_installer_only_is_none(self, monkeypatch):
+        """If a release somehow has only the installer, don't 'update' to it."""
+        import rezer.updater as up
+
+        class FakeResp:
+            def raise_for_status(self): pass
+            def json(self):
+                return {"tag_name": "v9.9.9",
+                        "assets": [{"name": "Rezer-Setup.exe",
+                                    "browser_download_url": "https://example.com/Rezer-Setup.exe"}]}
+
+        monkeypatch.setattr(up.requests, "get", lambda *a, **k: FakeResp())
+        monkeypatch.setattr(up, "__version__", "0.1.3")
         assert up.check_for_update() is None
 
 
@@ -598,6 +668,79 @@ class TestApiContract:
         assert api.get_suggestions("") == []
         hist.clear()
 
+    def test_suggestions_after_browsing(self):
+        """Simulate the real flow: visits get recorded (as app._on_loaded
+        does), then typing in the address bar must surface them."""
+        api, w, ctx = self._make_api()
+        hist = ctx["history"]
+        hist.clear()
+        # what _on_loaded records after real page loads
+        hist.add("https://www.youtube.com/watch?v=abc", "Cool Video - YouTube")
+        hist.add("https://github.com/Hoopslimbo/rezer", "Hoopslimbo/rezer - GitHub")
+        hist.add("https://www.reddit.com/r/test", "test subreddit")
+        out = api.get_suggestions("you")
+        assert any("youtube.com" in r["url"] for r in out), out
+        out = api.get_suggestions("git")
+        assert any("github.com" in r["url"] for r in out), out
+        # matched by title as well as URL
+        out = api.get_suggestions("cool video")
+        assert any("youtube.com" in r["url"] for r in out), out
+        assert api.get_suggestions("nonexistentthing") == []
+        hist.clear()
+
+    def test_google_suggestions(self, monkeypatch):
+        import rezer.api as api_mod
+
+        class FakeResp:
+            def raise_for_status(self): pass
+            def json(self):
+                return ["you", ["youtube", "youtube music", "you"]]
+
+        seen = {}
+        def fake_get(url, **k):
+            seen["url"] = url
+            seen["params"] = k.get("params")
+            return FakeResp()
+        monkeypatch.setattr(api_mod.requests, "get", fake_get)
+        api, w, ctx = self._make_api()
+        out = api.google_suggestions("you")
+        assert seen["url"] == "https://suggestqueries.google.com/complete/search"
+        titles = [o["title"] for o in out]
+        # echo of the query itself is dropped; results tagged as search kind
+        assert titles == ["youtube", "youtube music"]
+        assert all(o["kind"] == "search" for o in out)
+        assert all("google.com/search" in o["url"] for o in out)
+
+    def test_google_suggestions_offline_and_empty(self, monkeypatch):
+        import rezer.api as api_mod
+        import requests as req
+
+        def boom(*a, **k):
+            raise req.RequestException("offline")
+        monkeypatch.setattr(api_mod.requests, "get", boom)
+        api, w, ctx = self._make_api()
+        assert api.google_suggestions("anything") == []  # must not raise
+        assert api.google_suggestions("") == []
+        assert api.google_suggestions("   ") == []
+
+    def test_cycle_tab(self):
+        api, w, ctx = self._make_api()
+        tabs = ctx["tabs"]
+        t1 = tabs.tabs[0]
+        api.new_tab("https://b.com/")
+        t2 = tabs.active()
+        api.new_tab("https://c.com/")
+        t3 = tabs.active()
+        api.switch_tab(t1.id)
+        api.cycle_tab(1)
+        assert tabs.active().id == t2.id
+        api.cycle_tab(1)
+        assert tabs.active().id == t3.id
+        api.cycle_tab(1)  # wraps around
+        assert tabs.active().id == t1.id
+        api.cycle_tab(-1)  # and backwards
+        assert tabs.active().id == t3.id
+
     def test_get_history(self):
         api, w, ctx = self._make_api()
         assert isinstance(api.get_history(), list)
@@ -690,9 +833,9 @@ class TestApiContract:
 # Every api.X() call found in the UI must exist on Api.
 JS_API_CALLS = [
     # chrome.js
-    "close_tab", "switch_tab", "new_tab", "go_back", "go_forward", "reload",
+    "close_tab", "switch_tab", "new_tab", "cycle_tab", "go_back", "go_forward", "reload",
     "toggle_bookmark", "open_settings", "take_screenshot", "navigate",
-    "get_suggestions", "open_bookmark", "toggle_pin",
+    "get_suggestions", "google_suggestions", "open_bookmark", "toggle_pin",
     "toggle_luna", "luna_ask", "luna_summarize", "luna_explain", "luna_logo",
     "password_offer", "password_save", "password_fill",
     "on_url_changed", "on_title", "get_state",

@@ -21,8 +21,9 @@
   var chrome = document.createElement('div');
   chrome.id = 'rezer-chrome';
   chrome.innerHTML =
-    '<div id="rz-tabs"><div id="rz-tabspacer"></div>' +
-    '<button id="rz-newtab" title="New tab">+</button>' +
+    '<div id="rz-tabs">' +
+    '<button id="rz-newtab" title="New tab (Ctrl+T)">+</button>' +
+    '<div id="rz-tablist"><div id="rz-tabspacer"></div></div>' +
     '<button class="rz-iconbtn" id="rz-luna-btn" title="Luna AI">&#9790;</button>' +
     '<button class="rz-iconbtn" id="rz-menu-btn" title="Menu">&#8942;</button></div>' +
     '<div id="rz-nav">' +
@@ -86,6 +87,7 @@
     });
   }
 
+  var didInitialFocus = false;
   window.RezerChrome = {
     sync: function (state) {
       S = state;
@@ -95,6 +97,16 @@
       renderBookmarks(state);
       renderMisc(state);
       padPage();
+      // On a fresh document showing the new-tab page, put the cursor in the
+      // address bar (like Chrome's new tab). Only on the first sync of this
+      // document, so later state pushes never steal focus from the page.
+      if (!didInitialFocus) {
+        didInitialFocus = true;
+        if (state.activeUrl === 'rezer://newtab') {
+          var inp = document.getElementById('rz-addr');
+          if (inp) inp.focus();
+        }
+      }
     },
     lunaReply: function (text) {
       var thinking = document.querySelector('#rz-luna-msgs .rz-thinking');
@@ -133,23 +145,45 @@
     }
   }
 
+  function faviconUrl(u) {
+    try {
+      var p = new URL(u);
+      if (p.protocol === 'http:' || p.protocol === 'https:') return p.origin + '/favicon.ico';
+    } catch (e) {}
+    return null;
+  }
+
   function renderTabs(state) {
-    var strip = document.getElementById('rz-tabs');
-    // remove old tabs (keep spacer + buttons at end)
-    var olds = strip.querySelectorAll('.rz-tab');
-    for (var i = 0; i < olds.length; i++) olds[i].remove();
+    var list = document.getElementById('rz-tablist');
     var spacer = document.getElementById('rz-tabspacer');
+    // remove old tabs (the spacer stays as the insert anchor at the end)
+    var olds = list.querySelectorAll('.rz-tab');
+    for (var i = 0; i < olds.length; i++) olds[i].remove();
     state.tabs.forEach(function (t) {
       var b = document.createElement('button');
       b.className = 'rz-tab' + (t.id === state.activeId ? ' rz-active' : '');
       b.title = t.title || t.url;
       b.innerHTML = '<span class="rz-tab-title">' + esc(t.title || t.url) + '</span>' +
         '<span class="rz-tab-x" data-x="' + t.id + '">&#10005;</span>';
+      var fav = faviconUrl(t.url);
+      if (fav) {
+        var img = document.createElement('img');
+        img.className = 'rz-tab-fav';
+        img.alt = '';
+        img.src = fav;
+        img.addEventListener('error', function () { img.remove(); });
+        b.insertBefore(img, b.firstChild);
+      }
       b.addEventListener('click', function (e) {
         if (e.target.getAttribute('data-x')) { call('close_tab', t.id); e.stopPropagation(); return; }
         call('switch_tab', t.id);
       });
-      strip.insertBefore(b, spacer);
+      // middle-click closes the tab (and shouldn't trigger autoscroll)
+      b.addEventListener('mousedown', function (e) { if (e.button === 1) e.preventDefault(); });
+      b.addEventListener('auxclick', function (e) {
+        if (e.button === 1) { e.preventDefault(); call('close_tab', t.id); }
+      });
+      list.insertBefore(b, spacer);
     });
     var back = document.getElementById('rz-back'), fwd = document.getElementById('rz-fwd');
     back.style.opacity = state.canBack ? '1' : '0.35';
@@ -198,6 +232,34 @@
 
   /* ---------- events ---------- */
   document.getElementById('rz-newtab').addEventListener('click', function () { call('new_tab'); });
+  // double-click empty tab-strip space opens a new tab (like other browsers)
+  document.getElementById('rz-tabs').addEventListener('dblclick', function (e) {
+    if (e.target === e.currentTarget || e.target.id === 'rz-tablist' || e.target.id === 'rz-tabspacer') {
+      call('new_tab');
+    }
+  });
+
+  /* Browser keyboard shortcuts, handled in the capture phase so they work
+   * no matter where focus is — including while typing in a page input.
+   * (The webview hands all keys to the page, so the chrome owns these.) */
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    var k = e.key;
+    if (k === 't' || k === 'T') {
+      e.preventDefault(); e.stopPropagation();
+      call('new_tab');
+    } else if (k === 'w' || k === 'W') {
+      e.preventDefault(); e.stopPropagation();
+      if (S) call('close_tab', S.activeId);
+    } else if (k === 'Tab') {
+      e.preventDefault(); e.stopPropagation();
+      call('cycle_tab', e.shiftKey ? -1 : 1);
+    } else if (k === 'l' || k === 'L') {
+      e.preventDefault(); e.stopPropagation();
+      var inp = document.getElementById('rz-addr');
+      if (inp) { inp.focus(); inp.select(); }
+    }
+  }, true);
   document.getElementById('rz-back').addEventListener('click', function () { call('go_back'); });
   document.getElementById('rz-fwd').addEventListener('click', function () { call('go_forward'); });
   document.getElementById('rz-reload').addEventListener('click', function () { call('reload'); });
@@ -251,11 +313,12 @@
     var html = '';
     addrSugItems.forEach(function(it, i){
       var h = addrSugHost(it.url);
-      var letter = (h[0]||'?').toUpperCase();
+      var letter = it.kind === 'search' ? '&#8981;' : esc((h[0]||'?').toUpperCase());
+      var sub = it.sub || h;
       html += '<div class="rz-sg" data-i="'+i+'">' +
-        '<div class="rz-sg-ic">'+esc(letter)+'</div>' +
+        '<div class="rz-sg-ic">'+letter+'</div>' +
         '<div class="rz-sg-tx"><div class="rz-sg-ti">'+esc(it.title||h)+'</div>' +
-        '<div class="rz-sg-ur">'+esc(h)+'</div></div></div>';
+        '<div class="rz-sg-ur">'+esc(sub)+'</div></div></div>';
     });
     addrSugBox.innerHTML = html;
     addrSugBox.classList.add('rz-show');
@@ -274,12 +337,35 @@
       })(i);
     }
   }
+  function mergeAddrSug(gs){
+    // Append Google suggestions behind the history matches, deduped by
+    // title/url, capped so the dropdown stays compact.
+    if(!gs || !gs.length) return;
+    var seen = {};
+    addrSugItems.forEach(function(it){
+      seen[(it.title||'').toLowerCase()] = 1; seen[it.url] = 1;
+    });
+    var add = gs.filter(function(g){
+      return !seen[(g.title||'').toLowerCase()] && !seen[g.url];
+    });
+    if(add.length) renderAddrSug(addrSugItems.concat(add).slice(0, 10));
+  }
   addr.addEventListener('input', function(){
     clearTimeout(addrSugTimer);
     addrSugTimer = setTimeout(function(){
       var v = addr.value.trim();
       if(!v){ hideAddrSug(); return; }
-      call('get_suggestions', v).then(function(items){ renderAddrSug(items); });
+      // history first (instant, local)...
+      call('get_suggestions', v).then(function(items){
+        if(addr.value.trim() !== v) return;  // query moved on
+        renderAddrSug(items || []);
+        // ...then Google suggestions, so recommendations also work with an
+        // empty history (fresh install) instead of never appearing at all.
+        call('google_suggestions', v).then(function(gs){
+          if(addr.value.trim() !== v) return;
+          mergeAddrSug(gs || []);
+        });
+      });
     }, 150);
   });
 

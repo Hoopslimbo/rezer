@@ -63,11 +63,18 @@ class TabManager:
         return tab
 
     def close_tab(self, tab_id: int):
-        self.tabs = [t for t in self.tabs if t.id != tab_id]
+        idx = next((i for i, t in enumerate(self.tabs) if t.id == tab_id), None)
+        if idx is None:
+            return self.active()
+        was_active = self.active_id == tab_id
+        del self.tabs[idx]
         if not self.tabs:
             self.new_tab()
-        elif self.active_id == tab_id:
-            self.active_id = self.tabs[-1].id
+        elif was_active:
+            # Chrome behavior: activate the tab that slid into the closed
+            # tab's slot (its right neighbor), or the new last tab when the
+            # closed tab was the rightmost one.
+            self.active_id = self.tabs[min(idx, len(self.tabs) - 1)].id
         return self.active()
 
     def active(self) -> Tab:
