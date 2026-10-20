@@ -1,6 +1,6 @@
 """Auto-update: checks GitHub releases, downloads the new exe, swaps it in.
 
-Spec: auto-check + auto-install. Flow: on startup (and every 6h) compare the
+Spec: auto-check + auto-install. Flow: on startup (and every 15 min) compare the
 latest release tag with the bundled version. If newer, download the exe asset
 to a temp file, write a small updater .bat that waits for this process to exit,
 replaces the exe, and relaunches it — then exit immediately.
@@ -19,7 +19,7 @@ from . import __version__
 
 REPO = "Hoopslimbo/rezer"
 API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
-CHECK_INTERVAL = 6 * 3600
+CHECK_INTERVAL = 15 * 60
 
 
 def _current_exe() -> str:
@@ -87,12 +87,16 @@ def auto_update_loop(stop_event):
     """Background thread: check on start, then every CHECK_INTERVAL."""
     time.sleep(20)  # let the browser settle first
     while not stop_event.is_set():
-        found = check_for_update()
-        if found:
-            _, asset_url = found
-            if download_and_install(asset_url):
-                # updater bat will relaunch us; exit now
-                os._exit(0)
+        try:
+            found = check_for_update()
+            if found:
+                _, asset_url = found
+                if download_and_install(asset_url):
+                    # updater bat will relaunch us; exit now
+                    os._exit(0)
+        except Exception:
+            # a single bad check must never kill the background thread
+            pass
         stop_event.wait(CHECK_INTERVAL)
 
 
